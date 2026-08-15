@@ -1,55 +1,54 @@
 # Omaguard
 
-A Mullvad VPN widget for the [Omarchy](https://omarchy.org) Quattro.
+🛡️ Mullvad VPN widget for the [Omarchy](https://omarchy.org) Quattro bar — real
+tunnel state, one-click connect, and server switching.
 
-It shows the real connection state, connects and disconnects in one click and switches servers from the panel.
+Omaguard is a native Quickshell plugin for Omarchy 4's bar. It reads tunnel state
+from `mullvad-daemon` as a **push stream**, not a polling loop, so a
+`mullvad disconnect` typed in another terminal shows up in under a second. It
+never asks for a password, never needs root, and answers the question a status
+dot cannot: *is my traffic actually leaving through the tunnel?*
 
-```
-┌──────────────────────────────────────┐
-│ 🛡  Mullvad                      ●━━ │
-│    CONECTADO · ESTOCOLMO, SUÉCIA     │
-│                                      │
-│ Estado                    Conectado  │
-│ Localização     Stockholm, Sweden    │
-│ Servidor            se-sto-wg-201    │
-│ Saída        Confirmada pela Mullvad │
-│ Conta            28 dias restantes   │
-│ Proteções   Resistente a quântico    │
-│ Tráfego      ↓ 1,2 GB   ↑ 84,3 MB    │
-│                                      │
-│ SERVIDORES                           │
-│ ┌──────────────────────────────────┐ │
-│ │ Buscar país ou cidade            │ │
-│ └──────────────────────────────────┘ │
-│   Stockholm                       12 │
-│   Sweden                             │
-│   Gothenburg                       5 │
-│   Sweden                             │
-└──────────────────────────────────────┘
-```
+![The Omaguard panel open on an Omarchy desktop: shield icon in the bar, tunnel reported as disconnected, account days remaining, and a searchable list of Mullvad server cities](screenshots/omarchy-quattro-panel.png)
 
-## What it does
+## Features
 
-- **Live state.** The daemon pushes events; a `mullvad disconnect` typed in
-  another terminal shows up in the widget in under a second.
-- **One click to connect.** No password dialog, ever.
-- **Login in the panel itself.** Type the account number right there; it travels
-  over stdin, is never visible to other processes, and is never written to disk.
-- **Server switching with search.** 91 cities, each showing how many servers it
-  has.
-- **Tells you whether traffic really leaves through the VPN.** That is the
-  question "the interface is up" cannot answer — and the main reason this widget
-  exists.
-- **Details while connected.** Active protections, endpoint, tunnel interface,
-  and bytes transferred.
-- **Account status.** Days remaining and the device name.
-- **Degrades without breaking.** With no CLI installed, no daemon, or no account,
-  it explains what is missing instead of taking the bar down.
+- **Live tunnel state.** The daemon pushes one JSON event per change; a backoff
+  supervisor reconnects the stream when the daemon restarts, and a periodic
+  reconciliation corrects drift if it ever dies silently.
+- **Real exit verification.** The panel distinguishes *connected and confirmed*
+  from *connected but leaking* from *cannot tell yet* — an interface being up
+  does not prove traffic flows through it.
+- **One-click connect,** with an optimistic toggle that reacts before the daemon
+  confirms. No password prompt, ever: the Mullvad CLI talks to its daemon over a
+  socket.
+- **Server switching with search** across 91 cities, each showing how many relays
+  it has. Selecting one sets the constraint and brings the tunnel up in the right
+  order.
+- **Account login in the panel.** The account number travels over stdin, is
+  cleared the instant the daemon receives it, and is never logged, displayed, or
+  written to disk.
+- **Details while connected:** active protections (quantum resistance, DAITA,
+  multihop), endpoint and protocol, tunnel interface, and bytes transferred.
+- **Degrades honestly.** With no CLI, no daemon, or no account, it says which one
+  is missing and how to fix it — and the icon never claims "disconnected" for a
+  state it cannot observe.
+
+## Reference guides
+
+- [Architecture](docs/architecture.md) — state flow, update layers, credential
+  handling, process discipline
+- [Decisions](docs/decisions.md) — why the Mullvad CLI over plain WireGuard, why
+  a stream over polling, what was left out
+- [Mullvad CLI surface](docs/mullvad-cli.md) — verified command output with real
+  samples, the source of truth for the parser
+- [Development](docs/development.md) — dev cycle, validation, Quickshell traps,
+  manual verification script
 
 ## Requirements
 
 - Omarchy 4.x (Quattro), where the bar is a Quickshell plugin
-- `mullvad-vpn-daemon` — the CLI and the daemon, without the Electron app
+- `mullvad-vpn-daemon` — the CLI and daemon, without the Electron app
 
 ```bash
 sudo pacman -S mullvad-vpn-daemon
@@ -58,16 +57,15 @@ sudo systemctl enable --now mullvad-daemon
 
 No terminal login needed: the panel has a field for the account number.
 
-## Installation
+## Install
 
 ```bash
 omarchy plugin add https://github.com/JustSpica/omaguard.git --enable
 ```
 
-That is the whole thing. Omarchy clones the repository into
-`~/.config/omarchy/plugins/spica.omaguard/`, validates the manifest before
-trusting it, and — with `--enable` — asks which bar section to place the widget
-in and writes the entry for you.
+Omarchy clones the repository into `~/.config/omarchy/plugins/spica.omaguard/`,
+validates the manifest before trusting it, and — with `--enable` — asks which bar
+section to place the widget in and writes the entry for you.
 
 Drop `--enable` to install without touching the bar, then place it later:
 
@@ -92,7 +90,7 @@ cannot leave you with a broken bar.
 
 The repository *is* the plugin folder: `manifest.json` sits at its root because
 the clone lands directly in the plugins directory, with no subdirectory in
-between. `docs/` and `test/` come along and are simply never loaded.
+between. `docs/`, `test/`, and `screenshots/` come along and are never loaded.
 
 Plugins run as unsandboxed code inside the long-lived `omarchy-shell` process,
 which is why `omarchy plugin add` prints a warning and asks for confirmation.
@@ -100,17 +98,58 @@ Read the source before you enable anything — this one included.
 
 ## Usage
 
+### The bar icon
+
+The icon is a shield that reports four things at a glance — compare it across the
+screenshots on this page: struck through above, filled below, badged further
+down.
+
+| Appearance | Meaning |
+| --- | --- |
+| Filled | tunnel up |
+| Struck through | tunnel down |
+| Outline, no mark | state unknown — still probing |
+| Badge | needs you: no account, no daemon, no CLI, or traffic leaving outside the tunnel |
+
 | Action | Effect |
 | --- | --- |
-| Left click on the icon | open the panel |
+| Left click | open the panel |
 | Right click | connect or disconnect |
 | Middle click | force a refresh |
-| `c` with the panel open | connect or disconnect |
-| `Esc` | close |
 
-The icon is a shield: **filled** while the tunnel is up, **struck through** while
-it is down, and carrying a **badge** when something needs attention — no account,
-or traffic leaving outside the tunnel.
+### The panel
+
+![The Omaguard panel connected to a relay in Buenos Aires: exit confirmed by Mullvad, quantum-resistant protection, endpoint and udp protocol, wg0-mullvad interface, and transferred bytes](screenshots/omarchy-quattro-connected.png)
+
+Rows appear as they become knowable — the shot above is the full set, with the
+tunnel up. Below the fold sits the same server list shown on the disconnected
+panel. **Saída** is the one worth understanding:
+it reads `Confirmada pela Mullvad` when the daemon confirms the exit IP belongs
+to Mullvad, `Fora do túnel` when it does not, and `Verificando` while a
+transition is in flight — never guessing a leak from a missing field.
+
+**Servidores** lists cities rather than individual relays: the daemon already
+balances load within a city, and 91 entries stay navigable where 574 would not.
+Type to filter by country or city; picking one sets the constraint and then
+connects or reconnects, depending on the current state.
+
+With the panel open and the tunnel up, **Tráfego** polls the interface counters
+every 3 seconds. With the panel closed, that costs nothing.
+
+| Key | Action |
+| --- | --- |
+| `c` | connect or disconnect |
+| `Esc` | close the panel |
+| Typing | filters the server list when the search field has focus |
+
+### Signing in
+
+![The Omaguard panel with no account: the shield carries a warning badge, and the panel offers a masked 16-digit account number field with an Entrar button](screenshots/omarchy-quattro-logout.png)
+
+With no account, the panel collapses to a single question. The number is masked
+as you type, goes to the daemon over stdin, and is discarded the moment it is
+sent. Everything else stays hidden until there is an account to act on — the
+widget never offers a control it cannot honour.
 
 ### From the command line
 
@@ -119,19 +158,26 @@ omarchy-shell spica.omaguard status
 omarchy-shell spica.omaguard toggleVpn
 omarchy-shell spica.omaguard connect
 omarchy-shell spica.omaguard disconnect
+omarchy-shell spica.omaguard refresh
 ```
 
-Handy for Hyprland keybindings.
+Handy for Hyprland keybindings. `status` returns JSON:
+
+```json
+{"phase":"disconnected","location":"Canoas, Brazil","exitIsMullvad":false,"loggedIn":true,"daysLeft":28}
+```
+
+The action commands return `ok`, `busy`, or the reason they were refused
+(`cliMissing`, `daemonDown`, `noAccount`, `checkingAccount`) — they never report
+success for something that did not run.
 
 ## Configuration
 
-Inline keys on the `shell.json` entry:
+Inline keys on the widget's `shell.json` entry:
 
 | Key | Default | What it does |
 | --- | --- | --- |
 | `reconcileIntervalSec` | 30 | how often state is reconciled. Normal state arrives as daemon events; this only corrects drift if the stream dies silently. Accepts 10 to 3600 |
-
-Example:
 
 ```json
 { "id": "spica.omaguard", "reconcileIntervalSec": 60 }
@@ -139,16 +185,42 @@ Example:
 
 ## How it works
 
-State comes from `mullvad status --json listen`, a stream the daemon feeds with
-one JSON line per event — not from polling. A backoff supervisor reconnects the
-stream when the daemon restarts, and a periodic reconciliation corrects drift if
-it dies silently.
+**State is pushed, not polled.** `mullvad status --json listen` emits one JSON
+line per event for as long as the daemon lives. Three layers keep that honest: the
+stream itself, a backoff supervisor that reconnects from 1 s to a 30 s cap, and a
+reconciliation snapshot that corrects drift.
 
-The widget never needs root: the Mullvad CLI talks to the daemon over a socket.
-The account number, Mullvad's only credential, travels over stdin and is never
-persisted.
+**The exit code is not an error channel.** The Mullvad CLI exits `0` even with no
+account and no relay list, so output content is the only reliable signal. Every
+parser returns one of three shapes — parse failure, no data, or valid data — and
+that distinction is what keeps a gRPC error from being read as a logged-in
+account.
 
-Details in [`docs/architecture.md`](docs/architecture.md).
+**The account number is the only credential Mullvad has.** It is masked on
+screen, sent over stdin rather than `argv` where any `ps` could read it, cleared
+from memory right after the write, and never persisted. A test asserts that no
+parsed field can carry it.
+
+[`docs/architecture.md`](docs/architecture.md) covers all of this in depth.
+
+## Development
+
+```bash
+git clone https://github.com/JustSpica/omaguard.git ~/.config/omarchy/plugins/spica.omaguard
+```
+
+A cloned plugin is a real directory, so edits reload on save.
+
+```bash
+node --test 'test/*.test.js'                # parsing, against real fixtures
+omarchy plugin validate .                   # manifest, from the repo root
+journalctl --user -f | grep "spica.omaguard"
+```
+
+Parsing lives in `Model.js` with no QML import, which is what makes it testable
+outside a running shell — everything else needs eyes on the panel. See
+[`docs/development.md`](docs/development.md) for the manual verification script
+and the Quickshell traps worth knowing.
 
 ## Layout
 
@@ -162,27 +234,18 @@ Model.js             pure parsing — no QML, testable in Node
 MullvadIcon.qml      vector shield
 test/                Model tests and real CLI fixtures
 docs/                architecture, decisions, CLI surface, development
+screenshots/         images used by this README
 ```
-
-The manifest sits at the repository root because `omarchy plugin add` clones the
-repo *as* the plugin folder — there is no notion of a subdirectory. Extra files
-(`docs/`, `test/`, `README.md`) ride along harmlessly; the validator only rejects
-symlinks.
-
-## Documentation
-
-| Document | About |
-| --- | --- |
-| [`docs/architecture.md`](docs/architecture.md) | state flow, update layers, credential handling, process discipline |
-| [`docs/decisions.md`](docs/decisions.md) | why Mullvad CLI over plain WireGuard, why streaming over polling, what was left out |
-| [`docs/mullvad-cli.md`](docs/mullvad-cli.md) | verified CLI surface, with real samples of every output |
-| [`docs/development.md`](docs/development.md) | dev cycle, validation, Quickshell traps, and the manual verification script |
 
 ## Conventions
 
 Documentation, code comments, test names, and commit messages in English;
 Conventional Commits with scope (`feat(plugin):`, `docs:`). User-facing strings in
-the panel stay in Portuguese.
+the panel are in Portuguese.
 
 The full rules for agents live in [`AGENTS.md`](AGENTS.md) — that is the
 canonical file; do not duplicate rules in this README.
+
+## License
+
+MIT.
