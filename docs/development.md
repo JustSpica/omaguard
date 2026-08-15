@@ -169,5 +169,6 @@ All under `/usr/share/omarchy/shell/`.
 Documentation, code comments, test names, and commit messages in English.
 Conventional Commits with scope (`feat(plugin):`, `docs:`).
 
-The one exception is **user-facing strings in the panel, which stay in
-Portuguese** — that is what the person using the bar reads.
+**No user-facing string belongs in the source.** Every one lives in `locale/`,
+reached through `I18n.t()` or `I18n.plural()`. A literal in a `.qml` or in
+`Model.js` is a bug the key-parity test cannot catch.

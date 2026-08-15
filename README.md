@@ -33,6 +33,8 @@ dot cannot: *is my traffic actually leaving through the tunnel?*
 - **Degrades honestly.** With no CLI, no daemon, or no account, it says which one
   is missing and how to fix it — and the icon never claims "disconnected" for a
   state it cannot observe.
+- **Speaks your language.** English by default, Brazilian Portuguese when the
+  system asks for it, and adding a language means adding one file.
 
 ## Reference guides
 
@@ -171,6 +173,29 @@ The action commands return `ok`, `busy`, or the reason they were refused
 (`cliMissing`, `daemonDown`, `noAccount`, `checkingAccount`) — they never report
 success for something that did not run.
 
+## Languages
+
+The widget follows the system locale, falling back to English:
+
+| `LANG` | Panel language |
+| --- | --- |
+| `en_US.UTF-8`, or anything unrecognised | English |
+| `pt_BR.UTF-8` | Brazilian Portuguese |
+
+Tags are matched exactly, in `xx_YY` form. `pt` or `pt_PT` resolve to English
+rather than to `pt_BR` — a near-miss language reads worse than no translation.
+The locale is resolved once when the plugin loads, so a language change takes
+effect on the next `omarchy restart shell`.
+
+Adding a language is two steps:
+
+1. Copy `locale/en_US.js` to `locale/<xx_YY>.js` and translate the values.
+2. Register it in the `CATALOGS` map at the top of `I18n.js`.
+
+`node --test 'test/*.test.js'` then fails if the new catalogue is missing any
+key, or if a plural entry lacks its `one`/`other` forms. Missing keys fall back
+to English silently at runtime, which is why the test exists.
+
 ## Configuration
 
 Inline keys on the widget's `shell.json` entry:
@@ -232,6 +257,8 @@ RelayPicker.qml      city search and list
 TrafficCounters.qml  interface byte counters, read from sysfs
 Model.js             pure parsing — no QML, testable in Node
 MullvadIcon.qml      vector shield
+I18n.js              translation lookup, plural forms, locale resolution
+locale/              one catalogue per language (en_US, pt_BR)
 test/                Model tests and real CLI fixtures
 docs/                architecture, decisions, CLI surface, development
 screenshots/         images used by this README
@@ -240,8 +267,8 @@ screenshots/         images used by this README
 ## Conventions
 
 Documentation, code comments, test names, and commit messages in English;
-Conventional Commits with scope (`feat(plugin):`, `docs:`). User-facing strings in
-the panel are in Portuguese.
+Conventional Commits with scope (`feat(plugin):`, `docs:`). User-facing strings
+live in `locale/`, never inline in the source.
 
 The full rules for agents live in [`AGENTS.md`](AGENTS.md) — that is the
 canonical file; do not duplicate rules in this README.

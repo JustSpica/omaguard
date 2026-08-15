@@ -19,6 +19,8 @@ parsing isolated in a QML-free JavaScript file.
 | `TrafficCounters.qml` | interface byte counters, read from sysfs | yes |
 | `MullvadIcon.qml` | vector shield | yes |
 | `Model.js` | parsing and formatting, pure functions | **no** |
+| `I18n.js` | translation lookup, plural forms, locale resolution | **no** |
+| `locale/*.js` | one catalogue per language | **no** |
 
 `Model.js` importing no QML is what makes the project testable: it is the only
 file covered by automated tests, and it covers exactly the part that breaks when
