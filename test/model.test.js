@@ -14,14 +14,11 @@ const { test } = require("node:test")
 const assert = require("node:assert")
 const fs = require("node:fs")
 const path = require("node:path")
-const vm = require("node:vm")
+
+const { loadQmlJs } = require("./helpers.js")
 
 function loadModel() {
-  const source = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
-  const context = { module: { exports: {} } }
-  vm.createContext(context)
-  vm.runInContext(source.replace(/^\s*\.pragma library\s*$/m, ""), context)
-  return context
+  return loadQmlJs("Model.js")
 }
 
 function fixture(name) {
@@ -29,6 +26,15 @@ function fixture(name) {
 }
 
 const Model = loadModel()
+const I18n = loadQmlJs("I18n.js")
+
+// The catalogues are shared state across the suite; keep every test explicit
+// about the locale it asserts in.
+function withLocale(tag, body) {
+  const previous = I18n.locale()
+  I18n.setLocale(tag)
+  try { body() } finally { I18n.setLocale(previous) }
+}
 
 test("disconnected status carries a location and denies a Mullvad exit", () => {
   const parsed = Model.parseDaemonEvent(fixture("status-disconnected.json"))
@@ -56,7 +62,17 @@ test("connected status exposes endpoint, interface, and active protections", () 
   assert.strictEqual(parsed.endpointAddress, "89.37.63.10:55178")
   assert.strictEqual(parsed.endpointProtocol, "udp")
   assert.strictEqual(parsed.tunnelInterface, "wg0-mullvad")
-  assert.deepStrictEqual(Array.from(parsed.features), ["Resistente a quântico"])
+})
+
+test("protection labels follow the active locale", () => {
+  withLocale("en_US", () => {
+    const parsed = Model.parseDaemonEvent(fixture("status-connected.json"))
+    assert.deepStrictEqual(Array.from(parsed.features), ["Quantum resistant"])
+  })
+  withLocale("pt_BR", () => {
+    const parsed = Model.parseDaemonEvent(fixture("status-connected.json"))
+    assert.deepStrictEqual(Array.from(parsed.features), ["Resistente a quântico"])
+  })
 })
 
 test("disconnected has neither endpoint nor protections", () => {
@@ -90,12 +106,18 @@ test("a missing interface is unavailability, not an error", () => {
   assert.strictEqual(parsed.rxBytes, -1)
 })
 
-test("bytes become a readable unit with a decimal comma", () => {
-  assert.strictEqual(Model.formatBytes(0), "0 B")
-  assert.strictEqual(Model.formatBytes(512), "512 B")
-  assert.strictEqual(Model.formatBytes(1536), "1,5 KB")
-  assert.strictEqual(Model.formatBytes(2598223518), "2,4 GB")
-  assert.strictEqual(Model.formatBytes(-1), "")
+test("bytes become a readable unit, with the locale's decimal separator", () => {
+  withLocale("en_US", () => {
+    assert.strictEqual(Model.formatBytes(0), "0 B")
+    assert.strictEqual(Model.formatBytes(512), "512 B")
+    assert.strictEqual(Model.formatBytes(1536), "1.5 KB")
+    assert.strictEqual(Model.formatBytes(2598223518), "2.4 GB")
+    assert.strictEqual(Model.formatBytes(-1), "")
+  })
+  withLocale("pt_BR", () => {
+    assert.strictEqual(Model.formatBytes(1536), "1,5 KB")
+    assert.strictEqual(Model.formatBytes(2598223518), "2,4 GB")
+  })
 })
 
 test("a settings event is told apart from a tunnel event", () => {
@@ -163,7 +185,7 @@ test("an unexpected account response never becomes an authenticated account", ()
   const parsed = Model.parseAccountGet("gRPC call returned status Unavailable")
 
   assert.strictEqual(parsed.ok, false)
-  assert.strictEqual(parsed.message, "Resposta de conta ilegível")
+  assert.strictEqual(parsed.message, I18n.t("error.unreadableAccount"))
 })
 
 test("account output needs a Mullvad account marker and account metadata", () => {
@@ -240,9 +262,14 @@ test("relay selection chooses its follow-up from the phase before the constraint
   assert.deepStrictEqual(Array.from(Model.locationFollowUpCommand("connecting")), ["mullvad", "reconnect"])
 })
 
-test("login errors become specific messages", () => {
-  assert.strictEqual(Model.loginErrorMessage("Error: The account does not exist"), "Conta inexistente")
-  assert.strictEqual(Model.loginErrorMessage("status: InvalidArgument, INVALID_INPUT"), "Número de conta inválido")
+test("login errors become specific messages, in the active locale", () => {
+  withLocale("en_US", () => {
+    assert.strictEqual(Model.loginErrorMessage("Error: The account does not exist"), "That account does not exist")
+    assert.strictEqual(Model.loginErrorMessage("status: InvalidArgument, INVALID_INPUT"), "Invalid account number")
+  })
+  withLocale("pt_BR", () => {
+    assert.strictEqual(Model.loginErrorMessage("Error: The account does not exist"), "Conta inexistente")
+  })
   assert.strictEqual(Model.loginErrorMessage(""), "")
 })
 

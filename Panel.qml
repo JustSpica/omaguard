@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "I18n.js" as I18n
 
 Panel {
   id: root
@@ -158,7 +159,7 @@ Panel {
             width: parent.width
             title: "Mullvad"
             meta: root.heroMeta()
-            detail: mullvad.lockdownMode ? "LOCKDOWN" : ""
+            detail: mullvad.lockdownMode ? I18n.t("label.lockdown") : ""
             foreground: root.foreground
             fontFamily: root.fontFamily
             iconOpacity: mullvad.connected ? 1.0 : 0.5
@@ -185,7 +186,7 @@ Panel {
 
                 PanelToolTip {
                   visible: powerSwitch.containsMouse
-                  text: mullvad.connected ? "Desconectar" : "Conectar"
+                  text: I18n.t(mullvad.connected ? "action.disconnect" : "action.connect")
                   fontFamily: hero.fontFamily
                 }
               }
@@ -208,13 +209,13 @@ Panel {
         MessageBlock {
           visible: mullvad.availabilityState === "cliMissing"
           width: parent.width
-          text: "O CLI do Mullvad não está instalado.\nsudo pacman -S mullvad-vpn-daemon"
+          text: I18n.t("setup.cliMissing")
         }
 
         MessageBlock {
           visible: mullvad.availabilityState === "daemonDown"
           width: parent.width
-          text: "O daemon do Mullvad não responde.\nsudo systemctl start mullvad-daemon"
+          text: I18n.t("setup.daemonDown")
         }
 
         // --- login -----------------------------------------------------------
@@ -225,14 +226,14 @@ Panel {
           spacing: Style.space(8)
 
           PanelSectionHeader {
-            text: "CONTA"
+            text: I18n.t("account.title")
             foreground: root.foreground
             fontFamily: root.fontFamily
           }
 
           Text {
             width: parent.width
-            text: "Entre com o número da conta Mullvad (16 dígitos)."
+            text: I18n.t("account.prompt")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -249,7 +250,7 @@ Panel {
               // The number is the credential: masked on screen, held only in the
               // field, and discarded as soon as the daemon receives it over stdin.
               password: true
-              placeholderText: "0000 0000 0000 0000"
+              placeholderText: I18n.t("account.placeholder")
               foreground: root.foreground
               // TextField inherits from Qt Quick Controls: its font comes from
               // font.family, not from the kit's fontFamily.
@@ -267,7 +268,7 @@ Panel {
             }
 
             Button {
-              text: "Entrar"
+              text: I18n.t("account.submit")
               enabled: !mullvad.busy && root.loginDraft.replace(/\D/g, "").length === 16
               foreground: root.foreground
               fontFamily: root.fontFamily
@@ -288,28 +289,28 @@ Panel {
 
           DetailRow {
             width: parent.width
-            label: "Estado"
+            label: I18n.t("label.state")
             value: mullvad.phrase
           }
 
           DetailRow {
             width: parent.width
             visible: mullvad.locationLabel !== ""
-            label: "Localização"
+            label: I18n.t("label.location")
             value: mullvad.locationLabel
           }
 
           DetailRow {
             width: parent.width
             visible: mullvad.hostname !== ""
-            label: "Servidor"
+            label: I18n.t("label.server")
             value: mullvad.hostname
           }
 
           DetailRow {
             width: parent.width
             visible: mullvad.phase === "connected"
-            label: "Saída"
+            label: I18n.t("label.exit")
             value: root.exitPhrase()
             emphasis: root.leaking
           }
@@ -317,29 +318,29 @@ Panel {
           DetailRow {
             width: parent.width
             visible: mullvad.daysLeft >= 0
-            label: "Conta"
-            value: mullvad.daysLeft + (mullvad.daysLeft === 1 ? " dia restante" : " dias restantes")
+            label: I18n.t("label.account")
+            value: I18n.plural("account.daysLeft", mullvad.daysLeft)
             emphasis: mullvad.daysLeft <= 7
           }
 
           DetailRow {
             width: parent.width
             visible: mullvad.deviceName !== ""
-            label: "Dispositivo"
+            label: I18n.t("label.device")
             value: mullvad.deviceName
           }
 
           DetailRow {
             width: parent.width
             visible: mullvad.features.length > 0
-            label: "Proteções"
+            label: I18n.t("label.protections")
             value: mullvad.features.join(" · ")
           }
 
           DetailRow {
             width: parent.width
             visible: mullvad.endpointAddress !== ""
-            label: "Endpoint"
+            label: I18n.t("label.endpoint")
             value: mullvad.endpointProtocol !== ""
               ? mullvad.endpointAddress + " · " + mullvad.endpointProtocol
               : mullvad.endpointAddress
@@ -348,14 +349,14 @@ Panel {
           DetailRow {
             width: parent.width
             visible: mullvad.tunnelInterface !== ""
-            label: "Interface"
+            label: I18n.t("label.interface")
             value: mullvad.tunnelInterface
           }
 
           DetailRow {
             width: parent.width
             visible: mullvad.rxBytes >= 0
-            label: "Tráfego"
+            label: I18n.t("label.traffic")
             value: "↓ " + root.formatBytes(mullvad.rxBytes) + "   ↑ " + root.formatBytes(mullvad.txBytes)
           }
         }
@@ -386,12 +387,12 @@ Panel {
   }
 
   function heroMeta() {
-    if (mullvad.availabilityState === "checkingCli") return "Verificando"
-    if (mullvad.availabilityState === "cliMissing") return "Não instalado"
-    if (mullvad.availabilityState === "daemonDown") return "Daemon fora do ar"
-    if (mullvad.availabilityState === "checkingAccount") return "Verificando conta"
-    if (root.needsAccount) return "Sem conta"
-    if (root.leaking) return "Tráfego fora do túnel"
+    if (mullvad.availabilityState === "checkingCli") return I18n.t("status.checking")
+    if (mullvad.availabilityState === "cliMissing") return I18n.t("status.notInstalled")
+    if (mullvad.availabilityState === "daemonDown") return I18n.t("status.daemonDown")
+    if (mullvad.availabilityState === "checkingAccount") return I18n.t("status.checkingAccount")
+    if (root.needsAccount) return I18n.t("status.noAccount")
+    if (root.leaking) return I18n.t("status.leaking")
     return mullvad.locationLabel !== "" ? mullvad.phrase + " · " + mullvad.locationLabel : mullvad.phrase
   }
 
@@ -400,8 +401,8 @@ Panel {
   }
 
   function exitPhrase() {
-    if (!mullvad.hasLocation) return "Verificando"
-    return mullvad.exitIsMullvad ? "Confirmada pela Mullvad" : "Fora do túnel"
+    if (!mullvad.hasLocation) return I18n.t("exit.checking")
+    return I18n.t(mullvad.exitIsMullvad ? "exit.confirmed" : "exit.outside")
   }
 
   function submitLogin() {

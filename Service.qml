@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import "Model.js" as Model
+import "I18n.js" as I18n
 
 // State and I/O for the Mullvad widget. No UI: Panel.qml reads these properties
 // and calls these functions. The file name follows the convention of Omarchy's
@@ -156,13 +157,13 @@ Item {
   function connect() {
     if (!canOperate()) return false
     _desired = 1
-    return runAction(["mullvad", "connect"], "Conectando…", "connect")
+    return runAction(["mullvad", "connect"], I18n.t("action.connecting"), "connect")
   }
 
   function disconnect() {
     if (!canOperate()) return false
     _desired = 0
-    return runAction(["mullvad", "disconnect"], "Desconectando…", "disconnect")
+    return runAction(["mullvad", "disconnect"], I18n.t("action.disconnecting"), "disconnect")
   }
 
   function toggleConnection() {
@@ -178,7 +179,7 @@ Item {
     if (city) command.push(city)
     _locationFollowUpCommand = Model.locationFollowUpCommand(phase)
     _desired = 1
-    if (!runAction(command, "Trocando servidor…", "setLocation")) {
+    if (!runAction(command, I18n.t("action.switchingServer"), "setLocation")) {
       _locationFollowUpCommand = []
       _desired = -1
       return false
@@ -208,11 +209,11 @@ Item {
   function login(accountNumber) {
     if (availabilityState !== "noAccount" || loginProcess.running) return false
     if (!Model.isPlausibleAccountNumber(accountNumber)) {
-      lastError = "O número da conta tem 16 dígitos"
+      lastError = I18n.t("error.accountDigits")
       return false
     }
     lastError = ""
-    actionStatus = "Entrando…"
+    actionStatus = I18n.t("action.signingIn")
     loginProcess.timedOut = false
     loginProcess.pendingAccount = Model.normalizeAccountNumber(accountNumber)
     loginProcess.running = true
@@ -347,7 +348,7 @@ Item {
       var out = String(snapshotStdout.text || "").trim()
       if (out === "") {
         // Binary present and silent: the daemon is down.
-        root.markDaemonUnavailable(String(snapshotStderr.text || "") || "Daemon do Mullvad não responde")
+        root.markDaemonUnavailable(String(snapshotStderr.text || "") || I18n.t("error.daemonUnreachable"))
         // The package may have been removed after the initial probe. Re-resolve
         // PATH so the next UI state distinguishes that from a stopped daemon.
         root.probeCli()
@@ -366,7 +367,7 @@ Item {
     command: ["mullvad", "status", "--json", "listen"]
     stdout: SplitParser { onRead: function (line) { root.applyDaemonLine(line) } }
     onExited: function () {
-      root.markDaemonUnavailable("Conexão com o daemon foi interrompida")
+      root.markDaemonUnavailable(I18n.t("error.daemonStreamLost"))
       root.scheduleStreamRestart()
     }
   }
@@ -387,7 +388,7 @@ Item {
       if (exitCode !== 0 || error !== "") {
         root._locationFollowUpCommand = []
         root._desired = -1
-        root.lastError = Model.elide(error || "A ação falhou", 140)
+        root.lastError = Model.elide(error || I18n.t("error.actionFailed"), 140)
         root.actionStatus = ""
         return
       }
@@ -398,7 +399,7 @@ Item {
         root._locationFollowUpCommand = []
         Qt.callLater(function () {
           var kind = followUp[1] || ""
-          var label = kind === "connect" ? "Conectando…" : "Reconectando…"
+          var label = kind === "connect" ? I18n.t("action.connecting") : I18n.t("action.reconnecting")
           if (!root.canOperate() || !root.runAction(followUp, label, kind)) root._desired = -1
         })
         return
@@ -431,7 +432,7 @@ Item {
       var output = String(loginStdout.text || "") + " " + String(loginStderr.text || "")
       if (exitCode !== 0 || /error/i.test(output)) {
         root.lastError = Model.loginErrorMessage(output)
-        if (root.lastError === "") root.lastError = "Não foi possível entrar na conta"
+        if (root.lastError === "") root.lastError = I18n.t("error.signInFailed")
         root.loginFinished(false)
         return
       }
@@ -513,7 +514,7 @@ Item {
     repeat: false
     onTriggered: {
       if (snapshotProcess.running) snapshotProcess.running = false
-      root.markDaemonUnavailable("Daemon do Mullvad não respondeu a tempo")
+      root.markDaemonUnavailable(I18n.t("error.timeoutDaemon"))
     }
   }
 
@@ -524,7 +525,7 @@ Item {
     onTriggered: {
       if (accountProcess.running) accountProcess.running = false
       root.accountResolved = false
-      root.lastError = "A consulta da conta não respondeu a tempo"
+      root.lastError = I18n.t("error.timeoutAccount")
     }
   }
 
@@ -534,7 +535,7 @@ Item {
     repeat: false
     onTriggered: {
       if (relayListProcess.running) relayListProcess.running = false
-      root.lastError = "A lista de servidores não respondeu a tempo"
+      root.lastError = I18n.t("error.timeoutRelays")
     }
   }
 
@@ -577,7 +578,7 @@ Item {
       actionProcess.running = false
       root._desired = -1
       root.actionStatus = ""
-      root.lastError = "A ação não respondeu a tempo"
+      root.lastError = I18n.t("error.timeoutAction")
     }
   }
 
@@ -591,7 +592,7 @@ Item {
       loginProcess.pendingAccount = ""
       loginProcess.running = false
       root.actionStatus = ""
-      root.lastError = "O login não respondeu a tempo"
+      root.lastError = I18n.t("error.timeoutLogin")
       root.loginFinished(false)
     }
   }

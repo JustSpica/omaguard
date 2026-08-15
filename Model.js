@@ -19,6 +19,7 @@
 // `error` field is diagnostic and goes to the log in English.
 
 .pragma library
+.import "I18n.js" as I18n
 
 // Tunnel phases, in the order the daemon reports them.
 var TUNNEL_PHASES = ["disconnected", "connecting", "connected", "disconnecting", "error"]
@@ -33,11 +34,11 @@ function parseDaemonEvent(line) {
   try {
     event = JSON.parse(text)
   } catch (e) {
-    return { ok: false, error: String(e), message: "Evento ilegível do daemon" }
+    return { ok: false, error: String(e), message: I18n.t("error.unreadableEvent") }
   }
 
   if (!event || typeof event !== "object") {
-    return { ok: false, error: "event is not an object", message: "Evento ilegível do daemon" }
+    return { ok: false, error: "event is not an object", message: I18n.t("error.unreadableEvent") }
   }
   if (typeof event.state === "string") return readTunnelState(event)
   if (event.relay_settings !== undefined) return readDaemonSettings(event)
@@ -51,7 +52,7 @@ function parseDaemonEvent(line) {
 // `mullvad status --json` and the stream's tunnel events share one schema.
 function readTunnelState(event) {
   if (!event || typeof event.state !== "string") {
-    return { ok: false, error: "missing state field", message: "Estado ilegível" }
+    return { ok: false, error: "missing state field", message: I18n.t("error.unreadableState") }
   }
 
   var details = event.details || {}
@@ -79,31 +80,17 @@ function readTunnelState(event) {
 }
 
 // The daemon hands over the list of active protections ready-made. Known keys
-// get a label; unknown ones are passed through, so a newly added feature shows
-// up instead of silently disappearing. Labels are user-facing, hence Portuguese.
-var FEATURE_LABELS = {
-  QuantumResistance: "Resistente a quântico",
-  Daita: "DAITA",
-  Multihop: "Multihop",
-  BridgeMode: "Bridge",
-  SplitTunneling: "Split tunneling",
-  LockdownMode: "Lockdown",
-  LanSharing: "LAN liberada",
-  DnsContentBlockers: "Bloqueio de conteúdo",
-  CustomDns: "DNS personalizado",
-  ServerIpOverride: "IP de servidor forçado",
-  CustomMtu: "MTU personalizada",
-  Udp2Tcp: "UDP sobre TCP",
-  Shadowsocks: "Shadowsocks",
-  QuicObfuscation: "Ofuscação QUIC"
-}
-
+// get a translated label; unknown ones pass through raw, so a newly added
+// feature shows up instead of silently disappearing.
 function featureLabels(indicators) {
   if (!Array.isArray(indicators)) return []
 
   return indicators.map(function (indicator) {
-    var key = String(indicator || "")
-    return FEATURE_LABELS[key] || key
+    var name = String(indicator || "")
+    if (name === "") return ""
+    var label = I18n.t("feature." + name)
+    // t() returns the key itself when the catalogue has no entry.
+    return label === "feature." + name ? name : label
   }).filter(function (label) { return label !== "" })
 }
 
@@ -149,7 +136,7 @@ function normalizePhase(state) {
 // sentence is a valid result, not a failure — the exit code is 0 either way.
 function parseAccountGet(raw) {
   var text = String(raw || "").trim()
-  if (text === "") return { ok: true, unavailable: true, message: "Sem resposta do daemon" }
+  if (text === "") return { ok: true, unavailable: true, message: I18n.t("error.noDaemonResponse") }
 
   if (/not logged in/i.test(text)) {
     return { ok: true, loggedIn: false, expiresAt: "", deviceName: "" }
@@ -161,7 +148,7 @@ function parseAccountGet(raw) {
   var device = text.match(/device name:\s*(.+)/i)
 
   if (!/mullvad account:/i.test(text) || (!expiry && !device)) {
-    return { ok: false, error: "unexpected account response", message: "Resposta de conta ilegível" }
+    return { ok: false, error: "unexpected account response", message: I18n.t("error.unreadableAccount") }
   }
 
   return {
@@ -220,9 +207,9 @@ function toIsoInstant(text) {
 function loginErrorMessage(raw) {
   var text = String(raw || "").replace(/\s+/g, " ").trim()
   if (text === "") return ""
-  if (/does not exist/i.test(text)) return "Conta inexistente"
-  if (/INVALID_INPUT/i.test(text)) return "Número de conta inválido"
-  if (/too many devices|max devices/i.test(text)) return "Limite de dispositivos atingido"
+  if (/does not exist/i.test(text)) return I18n.t("error.accountMissing")
+  if (/INVALID_INPUT/i.test(text)) return I18n.t("error.accountInvalid")
+  if (/too many devices|max devices/i.test(text)) return I18n.t("error.deviceLimit")
   return elide(text, 140)
 }
 
@@ -249,7 +236,7 @@ function parseRelayList(raw) {
   var text = String(raw || "")
   if (text.trim() === "") {
     // With no account the CLI returns empty with exit 0. A state, not a failure.
-    return { ok: true, unavailable: true, message: "Lista de servidores indisponível", cities: [] }
+    return { ok: true, unavailable: true, message: I18n.t("error.relayListUnavailable"), cities: [] }
   }
 
   var lines = text.split("\n")
@@ -287,7 +274,7 @@ function parseRelayList(raw) {
 
   var withRelays = cities.filter(function (city) { return city.relayCount > 0 })
   if (withRelays.length === 0) {
-    return { ok: false, error: "no city found", message: "Lista de servidores ilegível", cities: [] }
+    return { ok: false, error: "no city found", message: I18n.t("error.relayListUnreadable"), cities: [] }
   }
   return { ok: true, cities: withRelays }
 }
@@ -318,11 +305,11 @@ function locationLabel(country, city) {
 }
 
 function phraseForPhase(phase, hasLocation) {
-  if (phase === "connected") return hasLocation ? "Conectado" : "Conectado, localizando"
-  if (phase === "connecting") return "Conectando"
-  if (phase === "disconnecting") return "Desconectando"
-  if (phase === "error") return "Erro no túnel"
-  return "Desconectado"
+  if (phase === "connected") return I18n.t(hasLocation ? "status.connected" : "status.connectedLocating")
+  if (phase === "connecting") return I18n.t("status.connecting")
+  if (phase === "disconnecting") return I18n.t("status.disconnecting")
+  if (phase === "error") return I18n.t("status.tunnelError")
+  return I18n.t("status.disconnected")
 }
 
 // Tunnel interface counters, read from
@@ -354,7 +341,7 @@ function formatBytes(bytes) {
   }
 
   var text = unit === 0 ? String(Math.round(value)) : value.toFixed(1)
-  return text.replace(".", ",") + " " + BYTE_UNITS[unit]
+  return text.replace(".", I18n.decimalSeparator()) + " " + BYTE_UNITS[unit]
 }
 
 function elide(raw, limit) {

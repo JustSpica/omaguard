@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "I18n.js" as I18n
 
 // City search and list for switching servers.
 //
@@ -35,7 +36,7 @@ Column {
   spacing: Style.space(8)
 
   PanelSectionHeader {
-    text: "SERVIDORES"
+    text: I18n.t("server.title")
     foreground: root.foreground
     fontFamily: root.fontFamily
   }
@@ -43,7 +44,7 @@ Column {
   TextField {
     id: search
     width: parent.width
-    placeholderText: "Buscar país ou cidade"
+    placeholderText: I18n.t("server.search")
     foreground: root.foreground
     font.family: root.fontFamily
     enabled: root.enabled
@@ -59,7 +60,7 @@ Column {
   Text {
     visible: root.cities.length === 0
     width: parent.width
-    text: "A lista de servidores ainda não chegou."
+    text: I18n.t("server.pending")
     color: root.dim
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
@@ -69,7 +70,7 @@ Column {
   Text {
     visible: root.cities.length > 0 && root.visibleCities.length === 0
     width: parent.width
-    text: "Nenhuma cidade para “" + root.query + "”."
+    text: I18n.t("server.noMatch", { query: root.query })
     color: root.dim
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
