@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "spica.omaguard",
+  "name": "Omaguard",
+  "version": "0.1.0",
+  "author": "spica",
+  "license": "MIT",
+  "description": "Mullvad VPN state, connection, and server switching in the Omarchy bar.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Panel.qml" },
+  "barWidget": {
+    "displayName": "Omaguard",
+    "description": "Connect, disconnect, and switch servers, with real tunnel state pushed by the daemon.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": { "reconcileIntervalSec": 30 },
+    "schema": [
+      {
+        "key": "reconcileIntervalSec",
+        "type": "integer",
+        "label": "Reconcile interval (seconds)",
+        "min": 10,
+        "max": 3600,
+        "step": 5,
+        "defaultValue": 30,
+        "description": "State arrives as daemon events. This interval only corrects drift if the stream dies silently."
+      }
+    ]
+  }
+}
