@@ -39,6 +39,13 @@ Item {
   property bool daemonReachable: false
   property bool accountResolved: false
   property bool loggedIn: false
+  readonly property string availabilityState: Model.availabilityState(
+    cliResolved, cliInstalled, daemonReachable, accountResolved, loggedIn)
+
+  // A daemon outage clears the account snapshot, and only the hourly timer or a
+  // panel open would restore it — leaving the widget stuck in "checkingAccount"
+  // with its controls disabled for up to an hour after the daemon comes back.
+  onDaemonReachableChanged: if (daemonReachable) refreshAccount()
 
   // --- tunnel -----------------------------------------------------------------
   property string phase: "disconnected"
@@ -76,13 +83,15 @@ Item {
   // --- account ----------------------------------------------------------------
   property string expiresAt: ""
   property string deviceName: ""
-  readonly property int daysLeft: expiresAt === "" ? -1 : Model.daysUntil(expiresAt, Date.now())
+  property real accountClockMs: Date.now()
+  readonly property int daysLeft: expiresAt === "" ? -1 : Model.daysUntil(expiresAt, accountClockMs)
 
   // --- feedback ---------------------------------------------------------------
   property string actionStatus: ""
   property string lastError: ""
 
   readonly property bool busy: actionProcess.running || loginProcess.running
+  readonly property string operationBlockReason: busy ? "busy" : availabilityState
   readonly property bool connected: _desired === -1 ? phase === "connected" : (_desired === 1)
   readonly property bool transitioning: phase === "connecting" || phase === "disconnecting"
   readonly property string phrase: Model.phraseForPhase(phase, hasLocation)
@@ -115,18 +124,22 @@ Item {
   function snapshot() {
     if (!cliInstalled || snapshotProcess.running) return
     snapshotProcess.running = true
+    snapshotWatchdog.restart()
   }
 
   function refresh() {
-    if (!cliResolved) { probeCli(); return }
+    if (!cliResolved) { probeCli(); return true }
+    if (!cliInstalled) return false
     snapshot()
     refreshAccount()
     refreshRelays()
+    return true
   }
 
   function refreshAccount() {
     if (!cliInstalled || accountProcess.running) return
     accountProcess.running = true
+    accountWatchdog.restart()
   }
 
   // The server list changes on a scale of days and costs ~50 KB of output, so it
@@ -135,63 +148,76 @@ Item {
     if (!cliInstalled || relayListProcess.running) return
     if (citiesResolved && force !== true) return
     relayListProcess.running = true
+    relayListWatchdog.restart()
   }
 
   // --- actions ----------------------------------------------------------------
 
   function connect() {
-    if (!canOperate()) return
+    if (!canOperate()) return false
     _desired = 1
-    runAction(["mullvad", "connect"], "Conectando…")
+    return runAction(["mullvad", "connect"], "Conectando…", "connect")
   }
 
   function disconnect() {
-    if (!canOperate()) return
+    if (!canOperate()) return false
     _desired = 0
-    runAction(["mullvad", "disconnect"], "Desconectando…")
+    return runAction(["mullvad", "disconnect"], "Desconectando…", "disconnect")
   }
 
   function toggleConnection() {
-    connected ? disconnect() : connect()
+    return connected ? disconnect() : connect()
   }
 
   // Picking a server is a request to connect to it: with the tunnel up the daemon
   // does not reconnect on its own when the constraint changes, and with it down,
   // merely storing the constraint would do nothing visible.
   function setLocation(country, city) {
-    if (!canOperate() || !country) return
+    if (!canOperate() || !country) return false
     var command = ["mullvad", "relay", "set", "location", country]
     if (city) command.push(city)
-    runAction(command, "Trocando servidor…")
+    _locationFollowUpCommand = Model.locationFollowUpCommand(phase)
     _desired = 1
-    followUpAction.restart()
+    if (!runAction(command, "Trocando servidor…", "setLocation")) {
+      _locationFollowUpCommand = []
+      _desired = -1
+      return false
+    }
+    return true
   }
 
   function canOperate() {
-    return cliInstalled && !actionProcess.running
+    return availabilityState === "operable" && !actionProcess.running && !loginProcess.running
   }
 
-  function runAction(command, label) {
+  function runAction(command, label, kind) {
+    if (actionProcess.running) return false
     actionStatus = label || ""
     lastError = ""
+    actionProcess.kind = kind || ""
+    actionProcess.timedOut = false
     actionProcess.command = command
     actionProcess.running = true
-    if (!actionWatchdog.running) actionWatchdog.start()
+    actionWatchdog.restart()
+    return true
   }
 
   // The account number is Mullvad's only credential. It goes over stdin because
   // in argv any `ps` would read it, and it is cleared as soon as the process
   // receives it — never logged, displayed, or persisted.
   function login(accountNumber) {
-    if (!cliInstalled || loginProcess.running) return
+    if (availabilityState !== "noAccount" || loginProcess.running) return false
     if (!Model.isPlausibleAccountNumber(accountNumber)) {
       lastError = "O número da conta tem 16 dígitos"
-      return
+      return false
     }
     lastError = ""
     actionStatus = "Entrando…"
+    loginProcess.timedOut = false
     loginProcess.pendingAccount = Model.normalizeAccountNumber(accountNumber)
     loginProcess.running = true
+    loginWatchdog.restart()
+    return true
   }
 
   // --- applying state ---------------------------------------------------------
@@ -247,9 +273,25 @@ Item {
 
   function applyAccount(raw) {
     var parsed = Model.parseAccountGet(raw)
-    accountResolved = true
-    if (!parsed.ok || parsed.unavailable) return
+    accountClockMs = Date.now()
+    if (!parsed.ok) {
+      accountResolved = false
+      loggedIn = false
+      expiresAt = ""
+      deviceName = ""
+      lastError = parsed.message
+      console.warn("spica.omaguard:", parsed.error)
+      return
+    }
+    if (parsed.unavailable) {
+      accountResolved = false
+      loggedIn = false
+      expiresAt = ""
+      deviceName = ""
+      return
+    }
 
+    accountResolved = true
     loggedIn = parsed.loggedIn === true
     expiresAt = parsed.loggedIn ? parsed.expiresAt : ""
     deviceName = parsed.loggedIn ? parsed.deviceName : ""
@@ -258,6 +300,27 @@ Item {
   function noteStatus(message) {
     actionStatus = message
     actionStatusTimer.restart()
+  }
+
+  function markDaemonUnavailable(message) {
+    daemonReachable = false
+    accountResolved = false
+    loggedIn = false
+    phase = "disconnected"
+    hasLocation = false
+    lockedDown = false
+    country = ""
+    city = ""
+    hostname = ""
+    exitIsMullvad = false
+    endpointAddress = ""
+    endpointProtocol = ""
+    tunnelInterface = ""
+    features = []
+    expiresAt = ""
+    deviceName = ""
+    _desired = -1
+    if (message) lastError = Model.elide(message, 140)
   }
 
   // --- processes --------------------------------------------------------------
@@ -280,11 +343,14 @@ Item {
     stdout: StdioCollector { id: snapshotStdout; waitForEnd: true }
     stderr: StdioCollector { id: snapshotStderr; waitForEnd: true }
     onExited: function () {
+      snapshotWatchdog.stop()
       var out = String(snapshotStdout.text || "").trim()
       if (out === "") {
         // Binary present and silent: the daemon is down.
-        root.daemonReachable = false
-        root.lastError = Model.elide(String(snapshotStderr.text || "") || "Daemon do Mullvad não responde", 140)
+        root.markDaemonUnavailable(String(snapshotStderr.text || "") || "Daemon do Mullvad não responde")
+        // The package may have been removed after the initial probe. Re-resolve
+        // PATH so the next UI state distinguishes that from a stopped daemon.
+        root.probeCli()
         return
       }
       root.applyDaemonLine(out)
@@ -300,20 +366,26 @@ Item {
     command: ["mullvad", "status", "--json", "listen"]
     stdout: SplitParser { onRead: function (line) { root.applyDaemonLine(line) } }
     onExited: function () {
-      root.daemonReachable = false
+      root.markDaemonUnavailable("Conexão com o daemon foi interrompida")
       root.scheduleStreamRestart()
     }
   }
 
   Process {
     id: actionProcess
+    property string kind: ""
+    property bool timedOut: false
     running: false
     command: []
     stderr: StdioCollector { id: actionStderr; waitForEnd: true }
     onExited: function (exitCode) {
       actionWatchdog.stop()
+      var completedKind = kind
+      kind = ""
+      if (timedOut) { timedOut = false; return }
       var error = String(actionStderr.text || "").trim()
       if (exitCode !== 0 || error !== "") {
+        root._locationFollowUpCommand = []
         root._desired = -1
         root.lastError = Model.elide(error || "A ação falhou", 140)
         root.actionStatus = ""
@@ -321,6 +393,16 @@ Item {
       }
 
       root.actionStatus = ""
+      if (completedKind === "setLocation" && root._locationFollowUpCommand.length > 0) {
+        var followUp = root._locationFollowUpCommand
+        root._locationFollowUpCommand = []
+        Qt.callLater(function () {
+          var kind = followUp[1] || ""
+          var label = kind === "connect" ? "Conectando…" : "Reconectando…"
+          if (!root.canOperate() || !root.runAction(followUp, label, kind)) root._desired = -1
+        })
+        return
+      }
       root.snapshot()
     }
   }
@@ -328,6 +410,7 @@ Item {
   Process {
     id: loginProcess
     property string pendingAccount: ""
+    property bool timedOut: false
 
     running: false
     command: ["mullvad", "account", "login"]
@@ -339,13 +422,16 @@ Item {
       write(pendingAccount + "\n")
       pendingAccount = ""
     }
-    onExited: {
+    onExited: function (exitCode) {
+      loginWatchdog.stop()
       root.actionStatus = ""
+      if (timedOut) { timedOut = false; return }
       // The CLI writes both the prompt and the error to stdout, and returns 0 even
       // when the account does not exist — the text is the only signal.
       var output = String(loginStdout.text || "") + " " + String(loginStderr.text || "")
-      if (/error/i.test(output)) {
+      if (exitCode !== 0 || /error/i.test(output)) {
         root.lastError = Model.loginErrorMessage(output)
+        if (root.lastError === "") root.lastError = "Não foi possível entrar na conta"
         root.loginFinished(false)
         return
       }
@@ -360,7 +446,15 @@ Item {
     running: false
     command: ["mullvad", "account", "get"]
     stdout: StdioCollector { id: accountStdout; waitForEnd: true }
-    onExited: root.applyAccount(String(accountStdout.text || ""))
+    stderr: StdioCollector { id: accountStderr; waitForEnd: true }
+    onExited: function (exitCode) {
+      accountWatchdog.stop()
+      if (exitCode !== 0) {
+        root.applyAccount(String(accountStderr.text || accountStdout.text || ""))
+        return
+      }
+      root.applyAccount(String(accountStdout.text || ""))
+    }
   }
 
   TrafficCounters {
@@ -375,6 +469,7 @@ Item {
     command: ["mullvad", "relay", "list"]
     stdout: StdioCollector { id: relayListStdout; waitForEnd: true }
     onExited: {
+      relayListWatchdog.stop()
       var parsed = Model.parseRelayList(String(relayListStdout.text || ""))
       if (!parsed.ok) {
         root.lastError = parsed.message
@@ -393,6 +488,7 @@ Item {
   // Stream backoff. A restarting daemon is normal (package update, suspend); the
   // cap keeps reconnection from becoming an unbounded tight loop.
   property int streamRetryMs: 1000
+  property var _locationFollowUpCommand: []
 
   function scheduleStreamRestart() {
     if (!cliInstalled) return
@@ -408,6 +504,37 @@ Item {
       if (!root.cliInstalled || statusStream.running) return
       statusStream.running = true
       root.snapshot()
+    }
+  }
+
+  Timer {
+    id: snapshotWatchdog
+    interval: 10000
+    repeat: false
+    onTriggered: {
+      if (snapshotProcess.running) snapshotProcess.running = false
+      root.markDaemonUnavailable("Daemon do Mullvad não respondeu a tempo")
+    }
+  }
+
+  Timer {
+    id: accountWatchdog
+    interval: 10000
+    repeat: false
+    onTriggered: {
+      if (accountProcess.running) accountProcess.running = false
+      root.accountResolved = false
+      root.lastError = "A consulta da conta não respondeu a tempo"
+    }
+  }
+
+  Timer {
+    id: relayListWatchdog
+    interval: 15000
+    repeat: false
+    onTriggered: {
+      if (relayListProcess.running) relayListProcess.running = false
+      root.lastError = "A lista de servidores não respondeu a tempo"
     }
   }
 
@@ -431,7 +558,10 @@ Item {
     repeat: true
     running: root.cliInstalled
     triggeredOnStart: true
-    onTriggered: root.refreshAccount()
+    onTriggered: {
+      root.accountClockMs = Date.now()
+      root.refreshAccount()
+    }
   }
 
   // Armed only at action launch. Re-arming on every refresh would push the
@@ -442,6 +572,8 @@ Item {
     repeat: false
     onTriggered: {
       if (!actionProcess.running) return
+      root._locationFollowUpCommand = []
+      actionProcess.timedOut = true
       actionProcess.running = false
       root._desired = -1
       root.actionStatus = ""
@@ -449,16 +581,18 @@ Item {
     }
   }
 
-  // Waits for the constraint to be stored before bringing the tunnel up.
-  // `reconnect` does not connect a closed tunnel, and `connect` does not switch
-  // relays on an open one — hence the two paths.
   Timer {
-    id: followUpAction
-    interval: 400
+    id: loginWatchdog
+    interval: 20000
     repeat: false
     onTriggered: {
-      if (root.phase === "disconnected") root.runAction(["mullvad", "connect"], "Conectando…")
-      else root.runAction(["mullvad", "reconnect"], "Reconectando…")
+      if (!loginProcess.running) return
+      loginProcess.timedOut = true
+      loginProcess.pendingAccount = ""
+      loginProcess.running = false
+      root.actionStatus = ""
+      root.lastError = "O login não respondeu a tempo"
+      root.loginFinished(false)
     }
   }
 

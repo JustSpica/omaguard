@@ -22,11 +22,23 @@ Panel {
   // location is present: during transitions the daemon nulls the field and
   // everything would look like a leak.
   readonly property bool leaking: mullvad.phase === "connected" && mullvad.hasLocation && !mullvad.exitIsMullvad
-  readonly property bool needsAccount: mullvad.cliInstalled && mullvad.accountResolved && !mullvad.loggedIn
-  readonly property bool operable: mullvad.cliInstalled && mullvad.loggedIn
+  readonly property bool needsAccount: mullvad.availabilityState === "noAccount"
+  readonly property bool operable: mullvad.availabilityState === "operable"
+
+  // Outside "operable" the tunnel state is unknown, not off: a stopped daemon
+  // leaves the WireGuard interface up in the kernel. The icon must not claim
+  // "disconnected" for something it cannot see — it goes neutral instead.
+  readonly property bool tunnelStateKnown: operable
+
+  // Situations that ask the user to do something, as opposed to merely waiting
+  // for a probe to answer.
+  readonly property bool needsAttention: leaking || needsAccount
+    || mullvad.availabilityState === "cliMissing"
+    || mullvad.availabilityState === "daemonDown"
 
   readonly property color barIconColor: {
     if (leaking) return root.urgent
+    if (!tunnelStateKnown) return Qt.darker(root.barForeground, 1.55)
     return mullvad.connected ? root.barForeground : Qt.darker(root.barForeground, 1.55)
   }
 
@@ -61,10 +73,10 @@ Panel {
     function show(): void { root.open() }
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
-    function connect(): string { mullvad.connect(); return "ok" }
-    function disconnect(): string { mullvad.disconnect(); return "ok" }
-    function toggleVpn(): string { mullvad.toggleConnection(); return "ok" }
-    function refresh(): string { mullvad.refresh(); return "ok" }
+    function connect(): string { return root.ipcActionResult(mullvad.connect()) }
+    function disconnect(): string { return root.ipcActionResult(mullvad.disconnect()) }
+    function toggleVpn(): string { return root.ipcActionResult(mullvad.toggleConnection()) }
+    function refresh(): string { return root.ipcActionResult(mullvad.refresh()) }
     function status(): string {
       return JSON.stringify({
         phase: mullvad.phase,
@@ -80,7 +92,6 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    tooltipText: mullvad.cliInstalled ? mullvad.phrase : "Mullvad não instalado"
 
     iconComponent: Component {
       Item {
@@ -89,9 +100,9 @@ Panel {
           iconSize: Style.space(11)
           color: root.barIconColor
           badgeColor: root.urgent
-          filled: mullvad.connected
-          crossed: !mullvad.connected && !root.needsAccount
-          warning: root.leaking || root.needsAccount
+          filled: root.tunnelStateKnown && mullvad.connected
+          crossed: root.tunnelStateKnown && !mullvad.connected
+          warning: root.needsAttention
         }
       }
     }
@@ -157,9 +168,9 @@ Panel {
                 iconSize: Style.font.display
                 color: root.leaking ? root.urgent : root.foreground
                 badgeColor: root.urgent
-                filled: mullvad.connected
-                crossed: !mullvad.connected && !root.needsAccount
-                warning: root.leaking || root.needsAccount
+                filled: root.tunnelStateKnown && mullvad.connected
+                crossed: root.tunnelStateKnown && !mullvad.connected
+                warning: root.needsAttention
               }
             }
 
@@ -195,13 +206,13 @@ Panel {
         // --- backend missing -----------------------------------------------
 
         MessageBlock {
-          visible: mullvad.cliResolved && !mullvad.cliInstalled
+          visible: mullvad.availabilityState === "cliMissing"
           width: parent.width
           text: "O CLI do Mullvad não está instalado.\nsudo pacman -S mullvad-vpn-daemon"
         }
 
         MessageBlock {
-          visible: mullvad.cliInstalled && !mullvad.daemonReachable
+          visible: mullvad.availabilityState === "daemonDown"
           width: parent.width
           text: "O daemon do Mullvad não responde.\nsudo systemctl start mullvad-daemon"
         }
@@ -375,12 +386,17 @@ Panel {
   }
 
   function heroMeta() {
-    if (!mullvad.cliResolved) return "Verificando"
-    if (!mullvad.cliInstalled) return "Não instalado"
-    if (!mullvad.daemonReachable) return "Daemon fora do ar"
+    if (mullvad.availabilityState === "checkingCli") return "Verificando"
+    if (mullvad.availabilityState === "cliMissing") return "Não instalado"
+    if (mullvad.availabilityState === "daemonDown") return "Daemon fora do ar"
+    if (mullvad.availabilityState === "checkingAccount") return "Verificando conta"
     if (root.needsAccount) return "Sem conta"
     if (root.leaking) return "Tráfego fora do túnel"
     return mullvad.locationLabel !== "" ? mullvad.phrase + " · " + mullvad.locationLabel : mullvad.phrase
+  }
+
+  function ipcActionResult(started) {
+    return started ? "ok" : mullvad.operationBlockReason
   }
 
   function exitPhrase() {

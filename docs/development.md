@@ -37,10 +37,16 @@ journalctl --user -f | grep "spica.omaguard"
 ```bash
 node --test 'test/*.test.js'                # parsing, against real fixtures
 omarchy plugin validate .                   # manifest, from the repo root
-qmllint -I /usr/share/omarchy/shell *.qml   # QML syntax
+qmllint -I /usr/share/omarchy/shell Service.qml RelayPicker.qml TrafficCounters.qml MullvadIcon.qml
 ```
 
-**`qmllint` is not enough.** It approved a nonexistent `fontFamily` on
+The system `qmllint 1.0` exits 255 without a diagnostic on `Panel.qml`. The same
+failure happens on Omarchy's built-in Tailscale panel, whose typed `IpcHandler`
+uses the same host-supported pattern. Keep `Panel.qml` in the runtime validation
+below until the packaged linter can parse that pattern; do not interpret the
+omission above as syntax coverage.
+
+**`qmllint` is not enough.** It also approved a nonexistent `fontFamily` on
 `TextField` that the shell rejected at runtime. The validation that counts is the
 log:
 

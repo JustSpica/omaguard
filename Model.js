@@ -160,12 +160,36 @@ function parseAccountGet(raw) {
   var expiry = text.match(/expires at:\s*(.+)/i)
   var device = text.match(/device name:\s*(.+)/i)
 
+  if (!/mullvad account:/i.test(text) || (!expiry && !device)) {
+    return { ok: false, error: "unexpected account response", message: "Resposta de conta ilegível" }
+  }
+
   return {
     ok: true,
     loggedIn: true,
     expiresAt: expiry ? expiry[1].trim() : "",
     deviceName: device ? device[1].trim() : ""
   }
+}
+
+// Availability is a single state instead of several independent UI decisions.
+// This prevents stale account data from making the widget look operable while
+// the daemon is unavailable.
+function availabilityState(cliResolved, cliInstalled, daemonReachable, accountResolved, loggedIn) {
+  if (!cliResolved) return "checkingCli"
+  if (!cliInstalled) return "cliMissing"
+  if (!daemonReachable) return "daemonDown"
+  if (!accountResolved) return "checkingAccount"
+  return loggedIn ? "operable" : "noAccount"
+}
+
+// Relay selection is a two-step action. Capture the required follow-up before
+// changing the constraint, because daemon events may change the phase while the
+// first command is running.
+function locationFollowUpCommand(phase) {
+  return phase === "disconnected"
+    ? ["mullvad", "connect"]
+    : ["mullvad", "reconnect"]
 }
 
 // Whole days left until expiry, or -1 when the date is unreadable.

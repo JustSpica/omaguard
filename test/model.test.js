@@ -159,6 +159,18 @@ test("no account is a valid result, not a failure", () => {
   assert.strictEqual(parsed.loggedIn, false)
 })
 
+test("an unexpected account response never becomes an authenticated account", () => {
+  const parsed = Model.parseAccountGet("gRPC call returned status Unavailable")
+
+  assert.strictEqual(parsed.ok, false)
+  assert.strictEqual(parsed.message, "Resposta de conta ilegível")
+})
+
+test("account output needs a Mullvad account marker and account metadata", () => {
+  assert.strictEqual(Model.parseAccountGet("Mullvad account: 1111222233334444").ok, false)
+  assert.strictEqual(Model.parseAccountGet("Expires at: 2026-09-13 09:43:04 -03:00").ok, false)
+})
+
 test("days remaining come from the CLI offset format", () => {
   const now = Date.parse("2026-09-03T09:43:04-03:00")
 
@@ -211,6 +223,21 @@ test("a country-only constraint selects every city in that country", () => {
   assert.strictEqual(Model.isSelectedCity(rio, "br", "rio"), true)
   assert.strictEqual(Model.isSelectedCity(rio, "br", "sao"), false)
   assert.strictEqual(Model.isSelectedCity(rio, "se", ""), false)
+})
+
+test("availability states are mutually exclusive and daemon loss wins over stale login", () => {
+  assert.strictEqual(Model.availabilityState(false, false, false, false, false), "checkingCli")
+  assert.strictEqual(Model.availabilityState(true, false, false, false, false), "cliMissing")
+  assert.strictEqual(Model.availabilityState(true, true, false, true, true), "daemonDown")
+  assert.strictEqual(Model.availabilityState(true, true, true, false, false), "checkingAccount")
+  assert.strictEqual(Model.availabilityState(true, true, true, true, false), "noAccount")
+  assert.strictEqual(Model.availabilityState(true, true, true, true, true), "operable")
+})
+
+test("relay selection chooses its follow-up from the phase before the constraint changes", () => {
+  assert.deepStrictEqual(Array.from(Model.locationFollowUpCommand("disconnected")), ["mullvad", "connect"])
+  assert.deepStrictEqual(Array.from(Model.locationFollowUpCommand("connected")), ["mullvad", "reconnect"])
+  assert.deepStrictEqual(Array.from(Model.locationFollowUpCommand("connecting")), ["mullvad", "reconnect"])
 })
 
 test("login errors become specific messages", () => {

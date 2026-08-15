@@ -84,6 +84,10 @@ different action from the user:
 | No account | daemon answers `Not logged in` | account number field |
 | Operable | active account | state, servers, details |
 
+The UI derives from one mutually exclusive `availabilityState`. If the daemon
+becomes unavailable, tunnel and account snapshots are cleared together; stale
+account data can never leave actions enabled behind a "daemon down" warning.
+
 ## Optimistic state
 
 The toggle does not wait for the daemon to confirm:
@@ -157,6 +161,12 @@ own process:
 - Actions get a 20s watchdog, **armed only at launch**. Re-arming on every
   refresh would push the deadline ahead of a hung process forever — a real bug,
   already fixed and commented in the built-in tailscale `Service.qml`.
+- Every finite daemon query has its own watchdog. A hung snapshot, account
+  lookup, relay list, login, or sysfs read is stopped without borrowing another
+  process's deadline.
+- Relay selection is sequenced by process completion: a successful
+  `relay set location` starts `connect` or `reconnect` from `onExited`. There is
+  no fixed delay that can race a slow daemon.
 - The relay list (~50 KB of output) loads once and only reloads on demand; it
   changes on a scale of days.
 - The account is queried once an hour, plus once per panel open.

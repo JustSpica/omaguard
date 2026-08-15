@@ -42,6 +42,7 @@ Item {
     var base = "/sys/class/net/" + tunnelInterface + "/statistics/"
     readProcess.command = ["cat", base + "rx_bytes", base + "tx_bytes"]
     readProcess.running = true
+    readWatchdog.restart()
   }
 
   Process {
@@ -50,6 +51,7 @@ Item {
     command: []
     stdout: StdioCollector { id: readStdout; waitForEnd: true }
     onExited: function (exitCode) {
+      readWatchdog.stop()
       // The interface vanished between scheduling and reading: the tunnel dropped.
       if (exitCode !== 0) { root.reset(); return }
 
@@ -57,6 +59,16 @@ Item {
       if (!counters.ok || counters.unavailable) return
       root._rxBytes = counters.rxBytes
       root._txBytes = counters.txBytes
+    }
+  }
+
+  Timer {
+    id: readWatchdog
+    interval: 2000
+    repeat: false
+    onTriggered: {
+      if (readProcess.running) readProcess.running = false
+      root.reset()
     }
   }
 
