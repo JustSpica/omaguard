@@ -28,6 +28,9 @@ dot cannot: *is my traffic actually leaving through the tunnel?*
 - **Account login in the panel.** The account number travels over stdin, is
   cleared the instant the daemon receives it, and is never logged, displayed, or
   written to disk.
+- **A world map** marking where your traffic surfaces, drawn as a dot grid in
+  your theme's colours. Rendered from a grid generated offline — nothing is
+  fetched at runtime.
 - **Details while connected:** active protections (quantum resistance, DAITA,
   multihop), endpoint and protocol, tunnel interface, and bytes transferred.
 - **Degrades honestly.** With no CLI, no daemon, or no account, it says which one
@@ -65,23 +68,23 @@ No terminal login needed: the panel has a field for the account number.
 omarchy plugin add https://github.com/JustSpica/omaguard.git --enable
 ```
 
-Omarchy clones the repository into `~/.config/omarchy/plugins/spica.omaguard/`,
+Omarchy clones the repository into `~/.config/omarchy/plugins/io.github.justspica.omaguard/`,
 validates the manifest before trusting it, and — with `--enable` — asks which bar
 section to place the widget in and writes the entry for you.
 
 Drop `--enable` to install without touching the bar, then place it later:
 
 ```bash
-omarchy plugin enable spica.omaguard --section right
-omarchy plugin disable spica.omaguard
-omarchy bar move spica.omaguard --before omarchy.network
+omarchy plugin enable io.github.justspica.omaguard --section right
+omarchy plugin disable io.github.justspica.omaguard
+omarchy bar move io.github.justspica.omaguard --before omarchy.network
 ```
 
 ### Updating and removing
 
 ```bash
-omarchy plugin update spica.omaguard    # fetch, show the diff, re-validate
-omarchy plugin remove spica.omaguard    # uninstall
+omarchy plugin update io.github.justspica.omaguard    # fetch, show the diff, re-validate
+omarchy plugin remove io.github.justspica.omaguard    # uninstall
 ```
 
 `update` only fast-forwards, re-validates the manifest afterwards, and rolls the
@@ -123,12 +126,20 @@ down.
 
 ![The Omaguard panel connected to a relay in Buenos Aires: exit confirmed by Mullvad, quantum-resistant protection, endpoint and udp protocol, wg0-mullvad interface, and transferred bytes](screenshots/omarchy-quattro-connected.png)
 
-Rows appear as they become knowable — the shot above is the full set, with the
-tunnel up. Below the fold sits the same server list shown on the disconnected
-panel. **Saída** is the one worth understanding:
-it reads `Confirmada pela Mullvad` when the daemon confirms the exit IP belongs
-to Mullvad, `Fora do túnel` when it does not, and `Verificando` while a
-transition is in flight — never guessing a leak from a missing field.
+The map marks where your traffic surfaces, and the marker's colour carries the
+meaning: **accent** for the relay the tunnel exits through, **plain** for your
+own location while disconnected, and **urgent** when traffic is leaving outside
+the tunnel.
+
+Rows come in two groups — connection first, then technical detail — and appear as
+they become knowable. State and location are absent on purpose: the hero above
+already reads `CONECTADO · TOKYO, JAPAN`. The panel scrolls when the content
+outgrows it.
+
+**Saída** is the row worth understanding: it reads `Confirmada pela Mullvad` when
+the daemon confirms the exit IP belongs to Mullvad, `Fora do túnel` when it does
+not, and `Verificando` while a transition is in flight — never guessing a leak
+from a missing field.
 
 **Servidores** lists cities rather than individual relays: the daemon already
 balances load within a city, and 91 entries stay navigable where 574 would not.
@@ -156,11 +167,11 @@ widget never offers a control it cannot honour.
 ### From the command line
 
 ```bash
-omarchy-shell spica.omaguard status
-omarchy-shell spica.omaguard toggleVpn
-omarchy-shell spica.omaguard connect
-omarchy-shell spica.omaguard disconnect
-omarchy-shell spica.omaguard refresh
+omarchy-shell io.github.justspica.omaguard status
+omarchy-shell io.github.justspica.omaguard toggleVpn
+omarchy-shell io.github.justspica.omaguard connect
+omarchy-shell io.github.justspica.omaguard disconnect
+omarchy-shell io.github.justspica.omaguard refresh
 ```
 
 Handy for Hyprland keybindings. `status` returns JSON:
@@ -205,7 +216,7 @@ Inline keys on the widget's `shell.json` entry:
 | `reconcileIntervalSec` | 30 | how often state is reconciled. Normal state arrives as daemon events; this only corrects drift if the stream dies silently. Accepts 10 to 3600 |
 
 ```json
-{ "id": "spica.omaguard", "reconcileIntervalSec": 60 }
+{ "id": "io.github.justspica.omaguard", "reconcileIntervalSec": 60 }
 ```
 
 ## How it works
@@ -231,7 +242,7 @@ parsed field can carry it.
 ## Development
 
 ```bash
-git clone https://github.com/JustSpica/omaguard.git ~/.config/omarchy/plugins/spica.omaguard
+git clone https://github.com/JustSpica/omaguard.git ~/.config/omarchy/plugins/io.github.justspica.omaguard
 ```
 
 A cloned plugin is a real directory, so edits reload on save.
@@ -239,7 +250,7 @@ A cloned plugin is a real directory, so edits reload on save.
 ```bash
 node --test 'test/*.test.js'                # parsing, against real fixtures
 omarchy plugin validate .                   # manifest, from the repo root
-journalctl --user -f | grep "spica.omaguard"
+journalctl --user -f | grep "io.github.justspica.omaguard"
 ```
 
 Parsing lives in `Model.js` with no QML import, which is what makes it testable
@@ -254,12 +265,15 @@ manifest.json        id, kinds, entryPoints, and the settings schema
 Panel.qml            bar icon, panel, login, details
 Service.qml          event stream, backoff, reconciliation, actions
 RelayPicker.qml      city search and list
+WorldMap.qml         dot-matrix world map with the relay marker
+MapData.js           the map grid, generated by tools/
 TrafficCounters.qml  interface byte counters, read from sysfs
 Model.js             pure parsing — no QML, testable in Node
 MullvadIcon.qml      vector shield
 I18n.js              translation lookup, plural forms, locale resolution
 locale/              one catalogue per language (en_US, pt_BR)
 test/                Model tests and real CLI fixtures
+tools/               regenerates MapData.js from a borders GeoJSON
 docs/                architecture, decisions, CLI surface, development
 screenshots/         images used by this README
 ```

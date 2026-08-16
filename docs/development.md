@@ -11,7 +11,7 @@ The plugin folder is the repository. Two ways to work on it:
 behind, and the closest thing to what a user runs:
 
 ```bash
-git clone <url> ~/.config/omarchy/plugins/spica.omaguard
+git clone <url> ~/.config/omarchy/plugins/io.github.justspica.omaguard
 ```
 
 Edits reload on save: this is a real directory, so Quickshell's watcher sees it.
@@ -19,7 +19,7 @@ Edits reload on save: this is a real directory, so Quickshell's watcher sees it.
 **Or symlink an existing checkout**, to keep the repo where you already work:
 
 ```bash
-ln -sfn "$PWD" ~/.config/omarchy/plugins/spica.omaguard
+ln -sfn "$PWD" ~/.config/omarchy/plugins/io.github.justspica.omaguard
 ```
 
 Convenient, but with two costs: the watcher does not follow a directory symlink,
@@ -29,7 +29,7 @@ directory instead.
 
 ```bash
 omarchy restart shell
-journalctl --user -f | grep "spica.omaguard"
+journalctl --user -f | grep "io.github.justspica.omaguard"
 ```
 
 ## Validation
@@ -51,7 +51,7 @@ omission above as syntax coverage.
 log:
 
 ```bash
-journalctl --user | grep "Plugin widget spica.omaguard failed"
+journalctl --user | grep "Plugin widget io.github.justspica.omaguard failed"
 ```
 
 A line there means the widget did not load. On the other hand,
@@ -163,6 +163,34 @@ the next update. Reading is safe and encouraged.
 | `services/PluginRegistry.qml` | what the manifest validator accepts |
 
 All under `/usr/share/omarchy/shell/`.
+
+## Publishing to the marketplace
+
+[omarchyplugins.com](https://omarchyplugins.com) lists plugins from a
+[GitHub repository](https://github.com/HANCORE-linux/omarchy-plugin-marketplace).
+Submission is an issue form that takes the repository URL and reads
+`manifest.json` from it — **category and tags are form fields, not manifest
+keys**, so there is nothing to declare in this repo for them.
+
+The values chosen for this plugin:
+
+| Field | Value |
+| --- | --- |
+| Category | `System` |
+| Tags | `Bar`, `Quickshell`, `Security` |
+
+`Bar` and `Quickshell` are what it is; `Security` is what it is for. More than
+three tags is an automatic rejection.
+
+The marketplace also requires `manifest.json`, a README with **installation and
+removal** instructions, and a licence file, all at the repository root — and its
+security baseline rejects passwordless sudo rules and privileged process control
+driven by PID files in shared `/tmp`. This plugin runs `mullvad` and `which` as
+argument arrays with no shell, so none of that applies.
+
+The plugin id is permanent once listed and a retired id cannot be reused, which
+is why `io.github.justspica.omaguard` was adopted before the first submission
+rather than after.
 
 ## Conventions
 
