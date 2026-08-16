@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell.Io
 import qs.Commons
@@ -140,10 +141,24 @@ Panel {
         if (key === "c" || key === "C") mullvad.toggleConnection()
       }
 
+      // The panel is capped in height, so the content has to scroll rather than
+      // be clipped: with the map and a connected tunnel it overflows, and
+      // without this the server list simply disappeared off the bottom.
+      Flickable {
+        id: panelFlick
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: column.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
       Column {
         id: column
-        width: parent.width
-        spacing: Style.space(12)
+        width: panelFlick.width
+        spacing: Style.space(10)
 
         Item {
           id: header
@@ -192,6 +207,21 @@ Panel {
               }
             }
           }
+        }
+
+        // Disconnected, the daemon reports where *you* are rather than a relay,
+        // so the marker changes colour with its meaning: accent for the server
+        // the tunnel exits through, plain foreground for your own location.
+        WorldMap {
+          visible: root.operable
+          width: parent.width
+          foreground: root.foreground
+          accent: root.leaking ? root.urgent
+            : mullvad.phase === "connected" ? Color.accent
+            : root.foreground
+          server: isFinite(mullvad.latitude) && isFinite(mullvad.longitude)
+            ? { lat: mullvad.latitude, lon: mullvad.longitude }
+            : null
         }
 
         Text {
@@ -278,34 +308,18 @@ Panel {
           }
         }
 
-        // --- connection state ------------------------------------------------
+        // --- connection --------------------------------------------------
+        //
+        // State and location are deliberately absent: the hero already reads
+        // "CONECTADO - TOKYO, JAPAN", and repeating it two rows below cost the
+        // height that pushed the server list off the panel.
 
         Column {
           visible: root.operable
           width: parent.width
-          spacing: Style.space(6)
+          spacing: Style.space(5)
 
           PanelSeparator { foreground: root.foreground }
-
-          DetailRow {
-            width: parent.width
-            label: I18n.t("label.state")
-            value: mullvad.phrase
-          }
-
-          DetailRow {
-            width: parent.width
-            visible: mullvad.locationLabel !== ""
-            label: I18n.t("label.location")
-            value: mullvad.locationLabel
-          }
-
-          DetailRow {
-            width: parent.width
-            visible: mullvad.hostname !== ""
-            label: I18n.t("label.server")
-            value: mullvad.hostname
-          }
 
           DetailRow {
             width: parent.width
@@ -317,24 +331,44 @@ Panel {
 
           DetailRow {
             width: parent.width
+            visible: mullvad.hostname !== ""
+            label: I18n.t("label.server")
+            value: mullvad.hostname
+          }
+
+          DetailRow {
+            width: parent.width
+            visible: mullvad.rxBytes >= 0
+            label: I18n.t("label.traffic")
+            value: "↓ " + root.formatBytes(mullvad.rxBytes) + "   ↑ " + root.formatBytes(mullvad.txBytes)
+          }
+
+          DetailRow {
+            width: parent.width
             visible: mullvad.daysLeft >= 0
             label: I18n.t("label.account")
             value: I18n.plural("account.daysLeft", mullvad.daysLeft)
             emphasis: mullvad.daysLeft <= 7
           }
+        }
 
-          DetailRow {
-            width: parent.width
-            visible: mullvad.deviceName !== ""
-            label: I18n.t("label.device")
-            value: mullvad.deviceName
-          }
+        // --- technical details ---------------------------------------------
+        //
+        // Diagnostic rather than daily: kept below the fold of a full panel,
+        // where scrolling reaches them without them crowding the rest.
+
+        Column {
+          visible: root.operable && mullvad.deviceName !== ""
+          width: parent.width
+          spacing: Style.space(5)
+
+          PanelSeparator { foreground: root.foreground }
 
           DetailRow {
             width: parent.width
             visible: mullvad.features.length > 0
             label: I18n.t("label.protections")
-            value: mullvad.features.join(" · ")
+            value: mullvad.features.join(" - ")
           }
 
           DetailRow {
@@ -342,7 +376,7 @@ Panel {
             visible: mullvad.endpointAddress !== ""
             label: I18n.t("label.endpoint")
             value: mullvad.endpointProtocol !== ""
-              ? mullvad.endpointAddress + " · " + mullvad.endpointProtocol
+              ? mullvad.endpointAddress + " - " + mullvad.endpointProtocol
               : mullvad.endpointAddress
           }
 
@@ -355,9 +389,9 @@ Panel {
 
           DetailRow {
             width: parent.width
-            visible: mullvad.rxBytes >= 0
-            label: I18n.t("label.traffic")
-            value: "↓ " + root.formatBytes(mullvad.rxBytes) + "   ↑ " + root.formatBytes(mullvad.txBytes)
+            visible: mullvad.deviceName !== ""
+            label: I18n.t("label.device")
+            value: mullvad.deviceName
           }
         }
 
@@ -381,7 +415,7 @@ Panel {
             mullvad.setLocation(countryCode, cityCode)
           }
         }
-
+      }
       }
     }
   }
@@ -393,7 +427,7 @@ Panel {
     if (mullvad.availabilityState === "checkingAccount") return I18n.t("status.checkingAccount")
     if (root.needsAccount) return I18n.t("status.noAccount")
     if (root.leaking) return I18n.t("status.leaking")
-    return mullvad.locationLabel !== "" ? mullvad.phrase + " · " + mullvad.locationLabel : mullvad.phrase
+    return mullvad.locationLabel !== "" ? mullvad.phrase + " - " + mullvad.locationLabel : mullvad.phrase
   }
 
   function ipcActionResult(started) {

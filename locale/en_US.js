@@ -33,8 +33,6 @@ var catalog = {
   "status.leaking": "Traffic outside the tunnel",
 
   // Panel row labels.
-  "label.state": "State",
-  "label.location": "Location",
   "label.server": "Server",
   "label.exit": "Exit",
   "label.account": "Account",

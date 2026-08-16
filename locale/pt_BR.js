@@ -23,8 +23,6 @@ var catalog = {
   "status.noAccount": "Sem conta",
   "status.leaking": "Tráfego fora do túnel",
 
-  "label.state": "Estado",
-  "label.location": "Localização",
   "label.server": "Servidor",
   "label.exit": "Saída",
   "label.account": "Conta",
