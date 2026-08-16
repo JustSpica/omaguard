@@ -20,6 +20,7 @@
 
 .pragma library
 .import "I18n.js" as I18n
+.import "MapData.js" as MapData
 
 // Tunnel phases, in the order the daemon reports them.
 var TUNNEL_PHASES = ["disconnected", "connecting", "connected", "disconnecting", "error"]
@@ -71,6 +72,8 @@ function readTunnelState(event) {
     city: location ? String(location.city || "") : "",
     hostname: location ? String(location.hostname || "") : "",
     exitIsMullvad: location ? location.mullvad_exit_ip === true : false,
+    latitude: location && isFinite(location.latitude) ? Number(location.latitude) : NaN,
+    longitude: location && isFinite(location.longitude) ? Number(location.longitude) : NaN,
     // endpoint only exists once the tunnel is up.
     endpointAddress: endpoint ? String(endpoint.address || "") : "",
     endpointProtocol: endpoint ? String(endpoint.protocol || "") : "",
@@ -310,6 +313,31 @@ function phraseForPhase(phase, hasLocation) {
   if (phase === "disconnecting") return I18n.t("status.disconnecting")
   if (phase === "error") return I18n.t("status.tunnelError")
   return I18n.t("status.disconnected")
+}
+
+// Equirectangular projection onto the dot grid in MapData.js, returning
+// normalised 0..1 coordinates so the caller owns the pixel size.
+//
+// The bounds come from MapData rather than being repeated here: the grid was
+// rasterised against them, and a marker placed on different bounds would drift
+// away from the coastline it belongs to.
+//
+// Latitudes outside the cropped band are clamped to the edge rather than
+// rejected. Mullvad has relays above it, and a marker pinned to the top of the
+// map is more useful than one that silently disappears.
+function projectToMap(latitude, longitude) {
+  var lat = Number(latitude)
+  var lon = Number(longitude)
+  if (!isFinite(lat) || !isFinite(lon)) return null
+  if (lon < -180 || lon > 180) return null
+
+  if (lat > MapData.LAT_TOP) lat = MapData.LAT_TOP
+  if (lat < MapData.LAT_BOTTOM) lat = MapData.LAT_BOTTOM
+
+  return {
+    x: (lon + 180) / 360,
+    y: (MapData.LAT_TOP - lat) / (MapData.LAT_TOP - MapData.LAT_BOTTOM)
+  }
 }
 
 // Tunnel interface counters, read from

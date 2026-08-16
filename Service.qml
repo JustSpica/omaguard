@@ -56,6 +56,8 @@ Item {
   property string city: ""
   property string hostname: ""
   property bool exitIsMullvad: false
+  property real latitude: NaN
+  property real longitude: NaN
   property string endpointAddress: ""
   property string endpointProtocol: ""
   property string tunnelInterface: ""
@@ -252,8 +254,12 @@ Item {
       country = state.country
       city = state.city
       hostname = state.hostname
+      latitude = state.latitude
+      longitude = state.longitude
     } else if (state.phase === "disconnected") {
       hostname = ""
+      latitude = NaN
+      longitude = NaN
     }
 
     if (_desired !== -1 && connectedPhase(state.phase) === (_desired === 1)) _desired = -1
@@ -313,6 +319,8 @@ Item {
     country = ""
     city = ""
     hostname = ""
+    latitude = NaN
+    longitude = NaN
     exitIsMullvad = false
     endpointAddress = ""
     endpointProtocol = ""

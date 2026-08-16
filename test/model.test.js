@@ -279,3 +279,40 @@ test("an account number is only accepted with 16 digits", () => {
   assert.strictEqual(Model.isPlausibleAccountNumber("123"), false)
   assert.strictEqual(Model.isPlausibleAccountNumber(""), false)
 })
+
+test("map projection places known cities on land", () => {
+  const grid = loadQmlJs("MapData.js")
+  const onLand = (lat, lon) => {
+    const point = Model.projectToMap(lat, lon)
+    const col = Math.min(grid.WIDTH - 1, Math.floor(point.x * grid.WIDTH))
+    const row = Math.min(grid.HEIGHT - 1, Math.floor(point.y * grid.HEIGHT))
+    return grid.rows[row][col] === "1"
+  }
+
+  // A marker landing in the ocean means the projection and the raster disagree
+  // about their bounds.
+  assert.ok(onLand(59.33, 18.06), "Stockholm")
+  assert.ok(onLand(-34.61, -58.38), "Buenos Aires")
+  assert.ok(onLand(1.35, 103.82), "Singapore")
+  assert.ok(onLand(40.71, -74.01), "New York")
+})
+
+test("map projection normalises to 0..1 and clamps beyond the cropped band", () => {
+  const middle = Model.projectToMap(13, 0)
+  assert.ok(middle.x > 0.49 && middle.x < 0.51, `x was ${middle.x}`)
+  assert.ok(middle.y > 0.49 && middle.y < 0.51, `y was ${middle.y}`)
+
+  // Pinned to the edge rather than dropped, so a far-north relay still shows.
+  assert.strictEqual(Model.projectToMap(89, 0).y, 0)
+  assert.strictEqual(Model.projectToMap(-80, 0).y, 1)
+
+  assert.strictEqual(Model.projectToMap(NaN, 10), null)
+  assert.strictEqual(Model.projectToMap(10, undefined), null)
+})
+
+test("the tunnel status carries coordinates for the map", () => {
+  const parsed = Model.parseDaemonEvent(fixture("status-connected.json"))
+
+  assert.strictEqual(parsed.latitude, 59.3289)
+  assert.strictEqual(parsed.longitude, 18.0649)
+})
