@@ -10,8 +10,8 @@ import "I18n.js" as I18n
 Panel {
   id: root
 
-  moduleName: "spica.omaguard"
-  ipcTarget: "spica.omaguard"
+  moduleName: "io.github.justspica.omaguard"
+  ipcTarget: "io.github.justspica.omaguard"
   manageIpc: false
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground

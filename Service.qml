@@ -229,7 +229,7 @@ Item {
     var parsed = Model.parseDaemonEvent(line)
     if (!parsed.ok) {
       lastError = parsed.message
-      console.warn("spica.omaguard:", parsed.error)
+      console.warn("io.github.justspica.omaguard:", parsed.error)
       return
     }
     if (parsed.unavailable) return
@@ -287,7 +287,7 @@ Item {
       expiresAt = ""
       deviceName = ""
       lastError = parsed.message
-      console.warn("spica.omaguard:", parsed.error)
+      console.warn("io.github.justspica.omaguard:", parsed.error)
       return
     }
     if (parsed.unavailable) {

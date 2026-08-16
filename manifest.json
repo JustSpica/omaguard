@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "spica.omaguard",
+  "id": "io.github.justspica.omaguard",
   "name": "Omaguard",
   "version": "0.1.0",
-  "author": "spica",
+  "author": "JustSpica",
   "license": "MIT",
   "description": "Mullvad VPN state, connection, and server switching in the Omarchy bar.",
   "kinds": ["bar-widget"],

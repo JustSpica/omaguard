@@ -115,11 +115,15 @@ appears is the user's configuration, managed with `omarchy plugin enable`,
 If that path happens to be a symlink, the write follows it: Quickshell's
 `atomicWrites` replaces the *target*, not the link.
 
-## Plugin id: `spica.omaguard`
+## Plugin id: `io.github.justspica.omaguard`
 
 The id carries the project name, not the backend's: what the widget talks to may
-change, but the plugin stays the same thing. Omarchy's validator reserves the
-`omarchy.*` namespace and rejects ids starting with it, hence the `spica.` prefix.
+change, but the plugin stays the same thing.
+
+The reverse-domain form is what the plugin marketplace prefers, and ids there are
+permanent — a retired one cannot be reused — so it was worth adopting before the
+first submission rather than after. Omarchy's own validator only requires that an
+id stay out of the reserved `omarchy.*` namespace.
 
 Because the id is fixed in `manifest.json`, the install is independent of the
 machine's username. It is also the plugin's address in three other places — the
